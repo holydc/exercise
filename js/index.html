@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<script>
+// library
+function $(selector) {
+  return document.querySelector(selector);
+}
+
+function apply(a, b) {
+  for (var k in b) {
+    if (b.hasOwnProperty(k)) {
+      a[k] = b[k];
+    }
+  }
+  return a;
+}
+
+function def(cls, config, ancestor, scope) {
+  scope = scope || this;
+  var ctor = 'return function ' + cls + '() {};';
+  if (config.hasOwnProperty('constructor')) {
+    var ctor_str = config.constructor.toString();
+    var l = ctor_str.indexOf('(') + 1;
+    var r = ctor_str.indexOf(')', l);
+    var args = ctor_str.substr(l, r - l);
+    ctor = 'return function ' + cls + '(' + args + ') {this.__proto__.constructor.call(this, ' + args + ');};';
+  }
+  scope[cls] = new Function(ctor)();
+  if (ancestor) {
+    apply(scope[cls].prototype, ancestor.prototype);
+    scope[cls].prototype.super = ancestor.prototype;
+  }
+  apply(scope[cls].prototype, config);
+}
+
+function namespace(ns) {
+  var nss = ns.split('.');
+  var scope = this;
+  for (var i = 0; i < nss.length; ++i) {
+    if (!scope[nss[i]]) {
+      scope[nss[i]] = {};
+    }
+    scope = scope[nss[i]];
+  }
+}
+
+// test
+namespace('dc.loser');
+
+def('Base', {
+  a: function () {
+    return 5566;
+  },
+  b: function () {
+    console.log('Base:' + this.a());
+    $('#output').innerHTML += 'Base:' + this.a() + '<br>';
+  }
+}, null, dc.loser);
+
+def('Derived', {
+  b: function () {
+    console.log('Derived:' + this.c(this.t));
+    $('#output').innerHTML += 'Derived:' + this.c(this.t) + '<br>';
+    this.super.b.call(this);
+  },
+  c: function (arg) {
+    return ('c:' + arg);
+  },
+  constructor: function (a, b) {
+    this.t = [a, b].join(' ');
+  }
+}, dc.loser.Base, dc);
+
+function ready() {
+  var foo = new dc.loser.Base();
+  foo.b();
+  var bar = new dc.Derived('Hello', 'World!');
+  bar.b();
+}
+</script>
+<body onload="ready();">
+  <div id="output"></div>
+</body>
