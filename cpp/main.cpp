@@ -1,93 +1,83 @@
-// TMP library
-/**
- * The container holding the number sequence
- */
-template<int... N> struct Sequence {};
+#include <memory>
 
-template<class, int> struct Append;
+template<class Prototype> class Function;
 
-/**
- * An util class appending a number to the specified sequence
- */
-template<int... BEGIN, int END>
-struct Append<Sequence<BEGIN...>, END> {
-  typedef Sequence<BEGIN..., END> result_type;
-};
+template<class Ret, class... Args>
+class Function<Ret(Args...)> {
+public:
+  template<class Target>
+  Function(Target target) : target_(std::make_shared<GeneralTarget<Target>>(std::move(target))) {
+  }
 
-/**
- * An util class generating a number sequence in [<tt>BEGIN</tt>, <tt>END</tt>]
- */
-template<int BEGIN, int END>
-struct SequenceGenerator {
-  static_assert(BEGIN <= END, "SequenceGenerator: invalid range");
-  typedef typename Append<typename SequenceGenerator<BEGIN, END - 1>::result_type, END>::result_type result_type;
-};
+  template<class Type>
+  Function(Type *instance, Ret(Type::*method)(Args...)) : target_(std::make_shared<BindTarget<Type>>(instance, method)) {
+  }
 
-/**
- * Specialization of <em>SequenceGenerator</em>, the terminating condition
- */
-template<int BEGIN>
-struct SequenceGenerator<BEGIN, BEGIN> {
-  typedef Sequence<BEGIN> result_type;
-};
+  Ret operator()(Args... args) {
+    return target_->invoke(std::forward<Args>(args)...);
+  }
 
-/**
- * An util class generating a number sequence in [0, <tt>N</tt>)
- */
-template<int N>
-struct IndexGenerator {
-  typedef typename SequenceGenerator<0, N - 1>::result_type result_type;
-};
+private:
+  struct TargetWrapper {
+    virtual ~TargetWrapper() = default;
+    virtual Ret invoke(Args... args) = 0;
+  }; // struct TargetWrapper
 
-template<template<int> class, class> struct Values;
+  template<class Target>
+  struct GeneralTarget : public TargetWrapper {
+    GeneralTarget(Target target) : target_(std::move(target)) {
+    }
 
-/**
- * The container holding the calculated values
- *
- * @tparam Calculator The specified calculating method
- * @tparam ValueType The data type of the calculated values
- * @tparam N The number sequence to be calculated
- */
-template<template<int> class Calculator, int... N>
-struct Values<Calculator, Sequence<N...>> {
-  /**
-   * The array of the calculated values
-   */
-  static const int values[sizeof...(N)];
-};
+    Ret invoke(Args... args) override {
+      return target_(std::forward<Args>(args)...);
+    }
 
-template<template<int> class Calculator, int... N>
-const int Values<Calculator, Sequence<N...>>::values[sizeof...(N)] = {
-  Calculator<N>::value...
-};
+    Target target_;
+  }; // struct GeneralTarget
 
-// Example
+  template<class Type>
+  struct BindTarget : public TargetWrapper {
+    BindTarget(Type *instance, Ret(Type::*method)(Args...)) : instance_(instance), method_(method) {
+    }
+
+    Ret invoke(Args... args) override {
+      return (instance_->*method_)(std::forward<Args>(args)...);
+    }
+
+    Type *instance_;
+    Ret(Type::*method_)(Args...);
+  }; // struct BindTarget
+
+  std::shared_ptr<TargetWrapper> target_;
+}; // class Function
+
+template<class Type, class Ret, class... Args>
+Function<Ret(Args...)> operator->*(std::shared_ptr<Type> instance, Ret(Type::*method)(Args...)) {
+  return Function<Ret(Args...)>(instance.get(), method);
+}
+
 #include <iostream>
 
-template<int N>
-struct Fibonacci {
-  static_assert(N >= 0, "Fibonacci: invalid argument");
-  static constexpr int value = Fibonacci<N - 2>::value + Fibonacci<N - 1>::value;
-};
+struct Foo {
+  Foo(int n) : n_(n) {
+  }
 
-template<>
-struct Fibonacci<1> {
-  static constexpr int value = 1;
-};
+  void method() {
+    std::cout << "Hello, World! " << n_ << std::endl;
+    ++n_;
+  }
 
-template<>
-struct Fibonacci<0> {
-  static constexpr int value = 0;
+  int n_;
 };
-
-template<int N>
-using FibonacciSequence = Values<Fibonacci, typename IndexGenerator<N>::result_type>;
 
 int main() {
-  constexpr int N = 20;
-  for (int i = 0; i < N; ++i) {
-    std::cout << FibonacciSequence<N>::values[i] << ", ";
-  }
-  std::cout << std::endl;
+  std::shared_ptr<Foo> foo = std::make_shared<Foo>(5566);
+  (foo->*(&Foo::method))();
+
+  auto method = &Foo::method;
+  (foo->*method)();
+
+  auto func = foo->*method;
+  func();
   return 0;
 }
