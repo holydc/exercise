@@ -1,83 +1,200 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <meta charset="utf-8">
+<style>
+  .main {
+    border: 1px solid black;
+    height: 640px;
+    position: relative;
+    width: 960px;
+  }
+
+  .member {
+    border-style: solid;
+    border-width: 4px;
+    border-radius: 50%;
+    cursor: grab;
+    cursor: -webkit-grab;
+    height: 124px;
+    position: absolute;
+    width: 124px;
+    z-index: 2;
+    transition-property: left, top;
+    transition-duration: 0.3s;
+    transition-timing-function: linear;
+  }
+
+  .smile {
+    border-color: red;
+  }
+
+  .cool {
+    border-color: blue;
+  }
+
+  .pure {
+    border-color: green;
+  }
+
+  .pos-1 {
+    left: 414px;
+    top: 496px;
+  }
+
+  .pos-2 {
+    left: 259px;
+    top: 465px;
+  }
+
+  .pos-3 {
+    left: 569px;
+    top: 465px;
+  }
+
+  .pos-4 {
+    left: 131px;
+    top: 379px;
+  }
+
+  .pos-5 {
+    left: 697px;
+    top: 379px;
+  }
+
+  .pos-6 {
+    left: 44px;
+    top: 249px;
+  }
+
+  .pos-7 {
+    left: 784px;
+    top: 249px;
+  }
+
+  .pos-8 {
+    left: 12px;
+    top: 96px;
+  }
+
+  .pos-9 {
+    left: 816px;
+    top: 96px;
+  }
+</style>
 <script>
-// library
-function $(selector) {
-  return document.querySelector(selector);
-}
+  var dragging = false;
 
-function apply(a, b) {
-  for (var k in b) {
-    if (b.hasOwnProperty(k)) {
-      a[k] = b[k];
+  function getClasses(dom) {
+    var _cls = dom.className.split(' ');
+    var cls = [];
+    for (var i = 0, len = _cls.length; i < len; ++i) {
+      var c = _cls[i];
+      if (c) {
+        cls.push(c);
+      }
     }
+    return cls;
   }
-  return a;
-}
 
-function def(cls, config, ancestor, scope) {
-  scope = scope || this;
-  var ctor = 'return function ' + cls + '() {};';
-  if (config.hasOwnProperty('constructor')) {
-    var ctor_str = config.constructor.toString();
-    var l = ctor_str.indexOf('(') + 1;
-    var r = ctor_str.indexOf(')', l);
-    var args = ctor_str.substr(l, r - l);
-    ctor = 'return function ' + cls + '(' + args + ') {this.__proto__.constructor.call(this, ' + args + ');};';
+  function addClass(dom, cls) {
+    dom.className += ' ' + cls;
+    return dom;
   }
-  scope[cls] = new Function(ctor)();
-  if (ancestor) {
-    apply(scope[cls].prototype, ancestor.prototype);
-    scope[cls].prototype.super = ancestor.prototype;
-  }
-  apply(scope[cls].prototype, config);
-}
 
-function namespace(ns) {
-  var nss = ns.split('.');
-  var scope = this;
-  for (var i = 0; i < nss.length; ++i) {
-    if (!scope[nss[i]]) {
-      scope[nss[i]] = {};
+  function removeClass(dom, cls) {
+    var classes = getClasses(dom);
+    var _cls = [];
+    for (var i = 0, len = classes.length; i < len; ++i) {
+      var c = classes[i];
+      if (c !== cls) {
+        _cls.push(c);
+      }
     }
-    scope = scope[nss[i]];
+    dom.className = _cls.join(' ');
+    return dom;
   }
-}
 
-// test
-namespace('dc.loser');
-
-def('Base', {
-  a: function () {
-    return 5566;
-  },
-  b: function () {
-    console.log('Base:' + this.a());
-    $('#output').innerHTML += 'Base:' + this.a() + '<br>';
+  function findClass(dom, pattern) {
+    var cls = getClasses(dom);
+    for (var i = 0, len = cls.length; i < len; ++i) {
+      var c = cls[i];
+      if (c.indexOf(pattern) !== -1) {
+        return c;
+      }
+    }
+    return false;
   }
-}, null, dc.loser);
 
-def('Derived', {
-  b: function () {
-    console.log('Derived:' + this.c(this.t));
-    $('#output').innerHTML += 'Derived:' + this.c(this.t) + '<br>';
-    this.super.b.call(this);
-  },
-  c: function (arg) {
-    return ('c:' + arg);
-  },
-  constructor: function (a, b) {
-    this.t = [a, b].join(' ');
+  function onMouseUp() {
+    if (!dragging) {
+      return;
+    }
+    document.body.removeEventListener('mousemove', onMouseMove);
+    document.body.removeEventListener('mouseup', onMouseUp);
+    var style = dragging.style;
+    style.transitionProperty = '';
+    style.cursor = '';
+    style.zIndex = '';
+    style.left = '';
+    style.top = '';
+    draggin = false;
   }
-}, dc.loser.Base, dc);
 
-function ready() {
-  var foo = new dc.loser.Base();
-  foo.b();
-  var bar = new dc.Derived('Hello', 'World!');
-  bar.b();
-}
+  function onMouseMove(event) {
+    var target = event.target;
+    if (target !== dragging) {
+      var transitionEnd = function (event) {
+        var target = event.target;
+        target.removeEventListener('transitionend', transitionEnd);
+        target.style.zIndex = '';
+      };
+
+      var pattern = 'pos-';
+      var from = findClass(target, pattern), to = findClass(dragging, pattern);
+      if (from && to) {
+        target.style.zIndex = '0';
+        target.addEventListener('transitionend', transitionEnd);
+        addClass(removeClass(target, from), to);
+        addClass(removeClass(dragging, to), from);
+      }
+    }
+
+    var limit = function (x, min, max) {
+      if (x < min) {
+        x = min;
+      } else if (x > max) {
+        x = max;
+      }
+      return x;
+    }
+
+    var style = dragging.style, computedStyle = getComputedStyle(dragging);
+    var x = limit(parseInt(computedStyle.left, 10) + event.movementX, 0, 828), y = limit(parseInt(computedStyle.top, 10) + event.movementY, 0, 508);
+    style.left = '' + x + 'px';
+    style.top = '' + y + 'px';
+  }
+
+  function onMouseDown(event) {
+    var target = event.target;
+    if (!findClass(target, 'member')) {
+      return;
+    }
+    document.body.addEventListener('mousemove', onMouseMove);
+    document.body.addEventListener('mouseup', onMouseUp);
+    dragging = target;
+    var style = dragging.style;
+    style.transitionProperty = 'none';
+    style.cursor = ((navigator.userAgent.toLowerCase().indexOf('chrome') === -1) ? 'grabbing' : '-webkit-grabbing');
+    style.zIndex = '1';
+  }
 </script>
-<body onload="ready();">
-  <div id="output"></div>
-</body>
+<div class="main" onmousedown="onMouseDown(event);">
+  <div class="member pos-1 smile" style="background:orange;"></div>
+  <div class="member pos-2 cool" style="background:cyan;"></div>
+  <div class="member pos-3 pure" style="background:white;"></div>
+  <div class="member pos-4 cool" style="background:blue;"></div>
+  <div class="member pos-5 smile" style="background:yellow;"></div>
+  <div class="member pos-6 cool" style="background:red;"></div>
+  <div class="member pos-7 pure" style="background:purple;"></div>
+  <div class="member pos-8 pure" style="background:green;"></div>
+  <div class="member pos-9 smile" style="background:pink;"></div>
+</div>
