@@ -1,129 +1,97 @@
-#include <memory>
-#include <utility>
+#include <cstring>
 
-template<class> class Function;
-
-template<class Ret, class... Args>
-class Function<Ret(Args...)> {
-public:
-  template<class Callable>
-  Function(Callable callable) : impl_(std::make_shared<Impl<Callable>>(std::move(callable))) {
-  }
-
-  Ret operator()(Args... args) {
-    return impl_->invoke(std::forward<Args>(args)...);
-  }
-
-private:
-  struct ImplBase {
-    virtual ~ImplBase() = default;
-    virtual Ret invoke(Args... args) = 0;
-  }; // struct ImplBase
-
-  template<class Callable>
-  struct Impl : public ImplBase {
-    Impl(Callable callable) : callable_(std::move(callable)) {
-    }
-
-    Ret invoke(Args... args) override {
-      return callable_(std::forward<Args>(args)...);
-    }
-
-    Callable callable_;
-  }; // struct Impl
-
-  template<class Method>
-  struct ClassMethodImpl : public ImplBase {
-    ClassMethodImpl(Method method) : method_(method) {
-    }
-
-    Ret invoke(Args... args) override {
-      return bind(std::forward<Args>(args)...);
-    }
-
-    template<class Type, class... _Args>
-    Ret bind(Type *_this, _Args&&... args) {
-      return (_this->*method_)(std::forward<_Args>(args)...);
-    }
-
-    template<class Type, class... _Args>
-    Ret bind(Type &_this, _Args&&... args) {
-      return (_this.*method_)(std::forward<_Args>(args)...);
-    }
-
-    Method method_;
-  }; // struct ClassMethodImpl
-
-  template<class Type, class... _Args>
-  struct Impl<Ret(Type::*)(_Args...)> : public ClassMethodImpl<Ret(Type::*)(_Args...)> {
-    typedef Ret(Type::*Method)(_Args...);
-
-    Impl(Method method) : ClassMethodImpl<Method>(std::move(method)) {
-    }
-  }; // struct Impl<Ret(Type::*)(_Args...)>
-
-  template<class Type, class... _Args>
-  struct Impl<Ret(Type::*)(_Args...) const> : public ClassMethodImpl<Ret(Type::*)(_Args...) const> {
-    typedef Ret(Type::*Method)(_Args...) const;
-
-    Impl(Method method) : ClassMethodImpl<Method>(std::move(method)) {
-    }
-  }; // struct Impl<Ret(Type::*)(_Args...) const>
-
-  std::shared_ptr<ImplBase> impl_;
-}; // class Function
-
+#include <chrono>
 #include <iostream>
+#include <string>
+#include <type_traits>
 
-struct Foo {
-  Foo(int n) : member(n) {
-    std::cout << "this:" << this << std::endl;
-  }
-
-  int method(int a) {
-    std::cout << "method a:" << a << " this:" << this << std::endl;
-    return member;
-  }
-
-  int const_method(const char *a) const {
-    std::cout << "const_method a:" << a << " this:" << this << std::endl;
-    return member;
-  }
-
-  int member;
+namespace dc {
+template<class Type, size_t N = sizeof(Type)>
+struct Mask {
+  static constexpr Type value = (Mask<Type, N - 1>::value << 8) | 0x80;
 };
 
-void test_method() {
-  std::cout << "enter " << __func__ << std::endl;
-  Function<int(Foo &, int)> f(&Foo::method);
-  Foo foo(5566);
-  std::cout << f(foo, 2498) << std::endl;
-  std::cout << "leave " << __func__ << std::endl;
+template<class Type>
+struct Mask<Type, 0> {
+  static constexpr Type value = 0;
+};
+
+template<class Type, typename std::enable_if<std::is_same<typename std::decay<Type>::type, char *>::value || std::is_same<typename std::decay<Type>::type, const char *>::value, int>::type = 0>
+int strlen(Type &&s) {
+  typedef unsigned int align_type;
+  constexpr auto align = sizeof(align_type);
+  constexpr auto align_mask = align - 1;
+
+  // align
+  auto char_ptr = s;
+  while ((reinterpret_cast<decltype(align_mask)>(char_ptr) & align_mask) != 0) {
+    if (*char_ptr == '\0') {
+      return (char_ptr - s);
+    }
+    ++char_ptr;
+  }
+
+  // compare multiple bytes at one time to utilize cache
+  auto aligned_ptr = reinterpret_cast<const align_type *>(char_ptr);
+  for (;;) {
+    if (((Mask<align_type>::value - *aligned_ptr) & Mask<align_type>::value) != 0) {
+      // one of these bytes is '\0'
+      char_ptr = reinterpret_cast<const char *>(aligned_ptr);
+      for (size_t i = 0; i < align; ++i) {
+        if (*char_ptr == '\0') {
+          return (char_ptr - s);
+        }
+        ++char_ptr;
+      }
+    }
+    ++aligned_ptr;
+  }
+
+  return -1;
 }
 
-void test_const_method() {
-  std::cout << "enter " << __func__ << std::endl;
-  Function<int(Foo *, const char *)> f(&Foo::const_method);
-  Foo foo(5566);
-  std::cout << f(&foo, "Hello, World!") << std::endl;
-  std::cout << "leave " << __func__ << std::endl;
+template<int N>
+constexpr int strlen(const char (&)[N]) {
+  return (N - 1);
 }
-
-void test() {
-  std::cout << "enter " << __func__ << std::endl;
-  Function<void()> func(&test_const_method);
-  func();
-
-  Function<int(int)> lambda = [&lambda] (int n) -> int {
-    return ((n == 1) ? 1 : (n * lambda(n - 1)));
-  };
-  std::cout << lambda(5) << std::endl;
-  std::cout << "leave " << __func__ << std::endl;
 }
 
 int main() {
-  test_method();
-  //test_const_method();
-  test();
+  constexpr int iteration = 10000000;
+  std::string hello_world("Hello, World!");
+  volatile int len;
+
+  std::cout << "strlen(\"Hello, World!\")... ";
+  auto start = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < iteration; ++i) {
+    len = strlen("Hello, World!");
+  }
+  auto stop = std::chrono::high_resolution_clock::now();
+  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << " ms" << std::endl;
+
+  std::cout << "strlen(hello_world)... ";
+  start = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < iteration; ++i) {
+    len = strlen(hello_world.c_str());
+  }
+  stop = std::chrono::high_resolution_clock::now();
+  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << " ms" << std::endl;
+
+  std::cout << "dc::strlen(\"Hello, World!\")... ";
+  start = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < iteration; ++i) {
+    len = dc::strlen("Hello, World!");
+  }
+  stop = std::chrono::high_resolution_clock::now();
+  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << " ms" << std::endl;
+
+  std::cout << "dc::strlen(hello_world)... ";
+  start = std::chrono::high_resolution_clock::now();
+  for (int i = 0; i < iteration; ++i) {
+    len = dc::strlen(hello_world.c_str());
+  }
+  stop = std::chrono::high_resolution_clock::now();
+  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << " ms" << std::endl;
+
   return 0;
 }
