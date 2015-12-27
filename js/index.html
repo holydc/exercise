@@ -1,200 +1,207 @@
 ﻿<!DOCTYPE html>
 <meta charset="utf-8">
 <style>
-  .main {
-    border: 1px solid black;
-    height: 640px;
+  body {
     position: relative;
-    width: 960px;
+    width: 800px;
   }
 
-  .member {
-    border-style: solid;
-    border-width: 4px;
-    border-radius: 50%;
-    cursor: grab;
-    cursor: -webkit-grab;
-    height: 124px;
+  p {
+    margin: 0;
+  }
+
+  .img {
     position: absolute;
-    width: 124px;
-    z-index: 2;
-    transition-property: left, top;
-    transition-duration: 0.3s;
-    transition-timing-function: linear;
-  }
-
-  .smile {
-    border-color: red;
-  }
-
-  .cool {
-    border-color: blue;
-  }
-
-  .pure {
-    border-color: green;
-  }
-
-  .pos-1 {
-    left: 414px;
-    top: 496px;
-  }
-
-  .pos-2 {
-    left: 259px;
-    top: 465px;
-  }
-
-  .pos-3 {
-    left: 569px;
-    top: 465px;
-  }
-
-  .pos-4 {
-    left: 131px;
-    top: 379px;
-  }
-
-  .pos-5 {
-    left: 697px;
-    top: 379px;
-  }
-
-  .pos-6 {
-    left: 44px;
-    top: 249px;
-  }
-
-  .pos-7 {
-    left: 784px;
-    top: 249px;
-  }
-
-  .pos-8 {
-    left: 12px;
-    top: 96px;
-  }
-
-  .pos-9 {
-    left: 816px;
-    top: 96px;
+    left: 0;
+    top: 0;
+    z-index: 1;
   }
 </style>
 <script>
-  var dragging = false;
+  function wrapText(target) {
+    (function clearWrapping() {
+      var spans = document.querySelectorAll('span');
+      for (var i = 0, n = spans.length; i < n; ++i) {
+        var span = spans[i];
+        if (spans[i].style.marginLeft) {
+          span.previousElementSibling.textContent += span.textContent;
+          span.parentElement.removeChild(span);
+        }
+      }
+    })();
 
-  function getClasses(dom) {
-    var _cls = dom.className.split(' ');
-    var cls = [];
-    for (var i = 0, len = _cls.length; i < len; ++i) {
-      var c = _cls[i];
-      if (c) {
-        cls.push(c);
+    var left = 0, right = 0, top = 0, bottom = 0;
+    (function getBoundingBox() {
+      for (var i = target; i; i = i.offsetParent) {
+        left += i.offsetLeft;
+        top += i.offsetTop;
+      }
+      right = left + target.offsetWidth;
+      bottom = top + target.offsetHeight;
+    })();
+
+    function line(span, ruler) {
+      var rects = span.getClientRects();
+      var begin = 0;
+      var text = span.textContent;
+      for (var i = 0, numRects = rects.length; i < numRects; ++i) {
+        var rect = rects[i];
+
+        /*
+        var div = document.createElement('div');
+        document.body.appendChild(div);
+        div.style.border = '1px solid red';
+        div.style.position = 'absolute';
+        div.style.left = '' + (rect.left - 9) + 'px';
+        div.style.top = '' + (rect.top - 9) + 'px';
+        div.style.width = '' + rect.width + 'px';
+        div.style.height = '' + rect.height + 'px';
+        */
+
+        var end = (function lineOffset() {
+          var l = begin, r = text.length;
+          while (l < r) {
+            var m = parseInt((l + r) / 2, 10);
+            //ruler.innerHTML = text.substr(begin, m - begin).replace(/ /g, '&nbsp;');
+            ruler.textContent = text.substr(begin, m - begin);
+            if (parseFloat(getComputedStyle(ruler).width) < rect.width) {
+              l = m + 1;
+            } else {
+              r = m;
+            }
+          }
+          return l;
+        })();
+
+        //ruler.innerHTML = text.substr(begin, end - begin).replace(/ /g, '&nbsp;');
+        //document.body.removeChild(div);
+
+        if ((rect.left < right) && (rect.right > left) && (rect.top < bottom) && (rect.bottom > top)) {
+          (function splitLine() {
+            var node = span.cloneNode(true);
+            if (span.nextElementSibling) {
+              span.parentElement.insertBefore(node, span.nextElementSibling);
+            } else {
+              span.parentElement.appendChild(node);
+            }
+            node.style.marginLeft = '';
+
+            end = (function wordOffset() {
+              var l = begin, r = end;
+              while (l < r) {
+                var m = parseInt((l + r) / 2, 10);
+                //span.innerHTML = text.substr(0, m).replace(/ /g, '&nbsp;');
+                span.textContent = text.substr(0, m);
+                if (node.offsetLeft < left) {
+                  l = m + 1;
+                } else {
+                  r = m;
+                }
+              }
+              return ((l > 0) ? (l - 1) : 0);
+            })();
+
+            /*
+            while (text.charAt(end) !== ' ') {
+              --end;
+              if (end < begin) {
+                end = begin;
+                break;
+              }
+            }
+            */
+
+            //span.innerHTML = text.substr(0, l).replace(/ /g, '&nbsp;');
+            span.textContent = text.substr(0, end);
+            //node.innerHTML = text.substr(l).replace(/ /g, '&nbsp;');
+            node.textContent = text.substr(end);
+            node.style.marginLeft = '' + (right - node.offsetLeft) + 'px';
+          })();
+
+          return;
+        }
+
+        begin = end;
+        while (text.charAt(begin) === ' ') {
+          ++begin;
+        }
       }
     }
-    return cls;
-  }
 
-  function addClass(dom, cls) {
-    dom.className += ' ' + cls;
-    return dom;
-  }
+    function run(p) {
+      for (var span = p.firstElementChild; span; span = span.nextElementSibling) {
+        if (span.tagName !== 'SPAN') {
+          continue;
+        }
 
-  function removeClass(dom, cls) {
-    var classes = getClasses(dom);
-    var _cls = [];
-    for (var i = 0, len = classes.length; i < len; ++i) {
-      var c = classes[i];
-      if (c !== cls) {
-        _cls.push(c);
-      }
-    }
-    dom.className = _cls.join(' ');
-    return dom;
-  }
+        var ruler = document.createElement('span');
+        document.body.appendChild(ruler);
+        ruler.style.position = 'absolute';
+        ruler.style.visibility = 'hidden';
+        ruler.style.whiteSpace = 'nowrap';
 
-  function findClass(dom, pattern) {
-    var cls = getClasses(dom);
-    for (var i = 0, len = cls.length; i < len; ++i) {
-      var c = cls[i];
-      if (c.indexOf(pattern) !== -1) {
-        return c;
-      }
-    }
-    return false;
-  }
+        var style = getComputedStyle(span);
+        var properties = ['font-family', 'font-size', 'font-style', 'font-variant', 'font-weight'];
+        for (var i = 0, numProperties = properties.length; i < numProperties; ++i) {
+          var property = properties[i];
+          ruler.style[property] = style[property];
+        }
 
-  function onMouseUp() {
-    if (!dragging) {
-      return;
-    }
-    document.body.removeEventListener('mousemove', onMouseMove);
-    document.body.removeEventListener('mouseup', onMouseUp);
-    var style = dragging.style;
-    style.transitionProperty = '';
-    style.cursor = '';
-    style.zIndex = '';
-    style.left = '';
-    style.top = '';
-    draggin = false;
-  }
+        line(span, ruler);
 
-  function onMouseMove(event) {
-    var target = event.target;
-    if (target !== dragging) {
-      var transitionEnd = function (event) {
-        var target = event.target;
-        target.removeEventListener('transitionend', transitionEnd);
-        target.style.zIndex = '';
-      };
-
-      var pattern = 'pos-';
-      var from = findClass(target, pattern), to = findClass(dragging, pattern);
-      if (from && to) {
-        target.style.zIndex = '0';
-        target.addEventListener('transitionend', transitionEnd);
-        addClass(removeClass(target, from), to);
-        addClass(removeClass(dragging, to), from);
+        document.body.removeChild(ruler);
       }
     }
 
-    var limit = function (x, min, max) {
-      if (x < min) {
-        x = min;
-      } else if (x > max) {
-        x = max;
+    (function paragraph() {
+      for (var p = document.querySelector('p') ; p && (p.tagName === 'P') ; p = p.nextElementSibling) {
+        if (p.offsetTop > bottom) {
+          break;
+        }
+
+        if ((p.offsetTop + p.offsetHeight) < top) {
+          continue;
+        }
+
+        run(p);
       }
-      return x;
-    }
-
-    var style = dragging.style, computedStyle = getComputedStyle(dragging);
-    var x = limit(parseInt(computedStyle.left, 10) + event.movementX, 0, 828), y = limit(parseInt(computedStyle.top, 10) + event.movementY, 0, 508);
-    style.left = '' + x + 'px';
-    style.top = '' + y + 'px';
+    })();
   }
 
-  function onMouseDown(event) {
-    var target = event.target;
-    if (!findClass(target, 'member')) {
-      return;
-    }
-    document.body.addEventListener('mousemove', onMouseMove);
-    document.body.addEventListener('mouseup', onMouseUp);
-    dragging = target;
-    var style = dragging.style;
-    style.transitionProperty = 'none';
-    style.cursor = ((navigator.userAgent.toLowerCase().indexOf('chrome') === -1) ? 'grabbing' : '-webkit-grabbing');
-    style.zIndex = '1';
+  function ready() {
+    var img = document.querySelector('.img');
+    img.addEventListener('mousedown', function (event) {
+      event.preventDefault();
+
+      var target = event.target;
+
+      function drag(event) {
+        var style = getComputedStyle(target);
+        target.style.left = '' + (parseInt(style.left, 10) + event.movementX) + 'px';
+        target.style.top = '' + (parseInt(style.top, 10) + event.movementY) + 'px';
+
+        wrapText(target);
+      }
+
+      function drop() {
+        document.body.removeEventListener('mousemove', drag);
+        document.body.removeEventListener('mouseup', drop);
+      }
+
+      document.body.addEventListener('mousemove', drag);
+      document.body.addEventListener('mouseup', drop);
+    });
   }
+
+  (function () {
+    document.addEventListener('DOMContentLoaded', ready);
+  })();
 </script>
-<div class="main" onmousedown="onMouseDown(event);">
-  <div class="member pos-1 smile" style="background:orange;"></div>
-  <div class="member pos-2 cool" style="background:cyan;"></div>
-  <div class="member pos-3 pure" style="background:white;"></div>
-  <div class="member pos-4 cool" style="background:blue;"></div>
-  <div class="member pos-5 smile" style="background:yellow;"></div>
-  <div class="member pos-6 cool" style="background:red;"></div>
-  <div class="member pos-7 pure" style="background:purple;"></div>
-  <div class="member pos-8 pure" style="background:green;"></div>
-  <div class="member pos-9 smile" style="background:pink;"></div>
-</div>
+<p>
+  <span>Love Live! (Japanese: ラブライブ! Hepburn: Rabu Raibu!?) School Idol Project is a Japanese multimedia project co-developed by ASCII Media Works' Dengeki G's Magazine, music label Lantis, and animation studio Sunrise. The project revolves around a group of fictional school girls who become idols in order to save their school from shutting down. It launched in the August 2010 issue of Dengeki G's Magazine, and went on to produce music CDs, anime music videos, two manga adaptations, and video games. A 13-episode anime television series produced by Sunrise and directed by Takahiko Kyōgoku aired in Japan between January and March 2013, with a second season airing between April and June 2014. Both anime series and film are licensed in North America, the United Kingdom, Australia and New Zealand by NIS America, MVM Entertainment and Madman Entertainment, respectively. An animated film titled Love Live! The School Idol Movie and distributed by Shochiku was released in June 2015. A new project titled Love Live! Sunshine!! has been announced, featuring an all-new cast of characters.</span>
+  <span>Love Live! (Japanese: ラブライブ! Hepburn: Rabu Raibu!?) School Idol Project is a Japanese multimedia project co-developed by ASCII Media Works' Dengeki G's Magazine, music label Lantis, and animation studio Sunrise. The project revolves around a group of fictional school girls who become idols in order to save their school from shutting down. It launched in the August 2010 issue of Dengeki G's Magazine, and went on to produce music CDs, anime music videos, two manga adaptations, and video games. A 13-episode anime television series produced by Sunrise and directed by Takahiko Kyōgoku aired in Japan between January and March 2013, with a second season airing between April and June 2014. Both anime series and film are licensed in North America, the United Kingdom, Australia and New Zealand by NIS America, MVM Entertainment and Madman Entertainment, respectively. An animated film titled Love Live! The School Idol Movie and distributed by Shochiku was released in June 2015. A new project titled Love Live! Sunshine!! has been announced, featuring an all-new cast of characters.</span>
+</p>
+<p>
+  <span>Love Live! (Japanese: ラブライブ! Hepburn: Rabu Raibu!?) School Idol Project is a Japanese multimedia project co-developed by ASCII Media Works' Dengeki G's Magazine, music label Lantis, and animation studio Sunrise. The project revolves around a group of fictional school girls who become idols in order to save their school from shutting down. It launched in the August 2010 issue of Dengeki G's Magazine, and went on to produce music CDs, anime music videos, two manga adaptations, and video games. A 13-episode anime television series produced by Sunrise and directed by Takahiko Kyōgoku aired in Japan between January and March 2013, with a second season airing between April and June 2014. Both anime series and film are licensed in North America, the United Kingdom, Australia and New Zealand by NIS America, MVM Entertainment and Madman Entertainment, respectively. An animated film titled Love Live! The School Idol Movie and distributed by Shochiku was released in June 2015. A new project titled Love Live! Sunshine!! has been announced, featuring an all-new cast of characters.</span>
+</p>
+<div class="img" style="width:256px;height:256px;background-color:green;opacity:0.3;"></div>
